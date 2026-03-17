@@ -143,6 +143,32 @@ async function startGateway(gpu) {
   }
   // Give DNS a moment to propagate
   require("child_process").spawnSync("sleep", ["5"]);
+
+  // On GPU-enabled gateways (e.g. DGX), the k3s GPU device plugin needs additional
+  // time to register GPU resources with the Kubernetes scheduler after the gateway
+  // HTTP endpoint becomes healthy. Poll until GPUs are allocatable, or time out and
+  // warn — sandbox creation will catch any remaining failure via pipefail (see below).
+  if (gpu && gpu.nimCapable) {
+    console.log("  Waiting for GPU resources to become allocatable in gateway...");
+    const GPU_WAIT_ATTEMPTS = 12; // 12 × 10s = 2 minutes
+    let gpuReady = false;
+    for (let i = 0; i < GPU_WAIT_ATTEMPTS; i++) {
+      const info = runCapture("openshell gateway info 2>&1", { ignoreError: true });
+      // The gateway reports allocatable GPU count once the device plugin is ready
+      if (info.match(/gpu[^:]*:\s*[1-9]/i) || info.includes("allocatable") && info.match(/[1-9]\s*gpu/i)) {
+        gpuReady = true;
+        break;
+      }
+      if (i < GPU_WAIT_ATTEMPTS - 1) {
+        require("child_process").spawnSync("sleep", ["10"]);
+      }
+    }
+    if (gpuReady) {
+      console.log("  ✓ GPU resources are allocatable");
+    } else {
+      console.log("  ⚠ GPU resources not confirmed allocatable — proceeding anyway (may fall back to CPU sandbox)");
+    }
+  }
 }
 
 // ── Step 3: Sandbox ──────────────────────────────────────────────
@@ -201,9 +227,15 @@ async function createSandbox(gpu) {
   if (process.env.NVIDIA_API_KEY) {
     envArgs.push(`NVIDIA_API_KEY=${process.env.NVIDIA_API_KEY}`);
   }
-  run(`openshell sandbox create ${createArgs.join(" ")} -- env ${envArgs.join(" ")} nemoclaw-start 2>&1 | awk '/Sandbox allocated/{if(!seen){print;seen=1}next}1'`);
+  // set -o pipefail ensures the openshell exit code propagates through the awk pipe.
+  // Without it, awk's exit code (always 0) would mask a failed sandbox create.
+  run(`set -o pipefail; openshell sandbox create ${createArgs.join(" ")} -- env ${envArgs.join(" ")} nemoclaw-start 2>&1 | awk '/Sandbox allocated/{if(!seen){print;seen=1}next}1'`);
 
-  // Forward dashboard port separately
+  // Release any stale forward on port 18789 before claiming it for the new sandbox.
+  // A previous onboard run may have left the port forwarded to a different sandbox,
+  // which would silently prevent the new sandbox's dashboard from being reachable.
+  run(`openshell forward stop 18789 2>/dev/null || true`, { ignoreError: true });
+  // Forward dashboard port to the new sandbox
   run(`openshell forward start --background 18789 "${sandboxName}"`, { ignoreError: true });
 
   // Clean up build context
