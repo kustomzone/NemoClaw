@@ -110,9 +110,9 @@ export function registerCliCommands(ctx: PluginCliContext, api: OpenClawPluginAp
     .command("onboard")
     .description("Interactive setup: configure inference endpoint, credential, and model")
     .option("--api-key <key>", "API key for endpoints that require one (skips prompt)")
-    .option("--endpoint <type>", "Endpoint type: build, ncp (others require NEMOCLAW_EXPERIMENTAL=1)")
+    .option("--endpoint <type>", "Endpoint type: build, ncp, nim-local, vllm, ollama, custom (local options are experimental)")
     .option("--ncp-partner <name>", "NCP partner name (when endpoint is ncp)")
-    .option("--endpoint-url <url>", "Endpoint URL (for ncp or experimental endpoints)")
+    .option("--endpoint-url <url>", "Endpoint URL (for ncp, nim-local, ollama, or custom)")
     .option("--model <model>", "Model ID to use")
     .action(
       async (opts: {

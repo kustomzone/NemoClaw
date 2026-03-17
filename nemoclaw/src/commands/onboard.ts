@@ -142,9 +142,8 @@ function showConfig(config: NemoClawOnboardConfig, logger: PluginLogger): void {
 
 async function promptEndpoint(
   ollama: { installed: boolean; running: boolean },
-  experimental: boolean,
 ): Promise<EndpointType> {
-  const options = [
+  return (await promptSelect("Select your inference endpoint:", [
     {
       label: "NVIDIA Build (build.nvidia.com)",
       value: "build",
@@ -155,29 +154,22 @@ async function promptEndpoint(
       value: "ncp",
       hint: "dedicated capacity, SLA-backed",
     },
-  ];
-
-  if (experimental) {
-    options.push(
-      {
-        label: "Self-hosted NIM",
-        value: "nim-local",
-        hint: "experimental — your own NIM container deployment",
-      },
-      {
-        label: "Local vLLM",
-        value: "vllm",
-        hint: "experimental — local development",
-      },
-      {
-        label: "Local Ollama",
-        value: "ollama",
-        hint: `experimental — ${ollama.installed ? "installed locally" : "localhost:11434"}`,
-      },
-    );
-  }
-
-  return (await promptSelect("Select your inference endpoint:", options)) as EndpointType;
+    {
+      label: "Self-hosted NIM [experimental]",
+      value: "nim-local",
+      hint: "experimental — your own NIM container deployment",
+    },
+    {
+      label: "Local vLLM [experimental]",
+      value: "vllm",
+      hint: "experimental — local development",
+    },
+    {
+      label: "Local Ollama [experimental]",
+      value: "ollama",
+      hint: `experimental — ${ollama.installed ? "installed locally" : "localhost:11434"}`,
+    },
+  ])) as EndpointType;
 }
 
 function execOpenShell(args: string[]): string {
@@ -212,7 +204,6 @@ export async function cliOnboard(opts: OnboardOptions): Promise<void> {
   }
 
   // Step 1: Endpoint Selection
-  const experimental = isExperimentalEnabled();
   let endpointType: EndpointType;
   if (opts.endpoint) {
     if (!ENDPOINT_TYPES.includes(opts.endpoint as EndpointType)) {
@@ -222,25 +213,19 @@ export async function cliOnboard(opts: OnboardOptions): Promise<void> {
       return;
     }
     const ep = opts.endpoint as EndpointType;
-    if (!experimental && !SUPPORTED_ENDPOINT_TYPES.includes(ep)) {
+    if (!SUPPORTED_ENDPOINT_TYPES.includes(ep)) {
       logger.warn(
-        `Endpoint '${ep}' is experimental. Set NEMOCLAW_EXPERIMENTAL=1 to enable it.`,
+        `Note: '${ep}' is experimental and may not work reliably.`,
       );
-      return;
     }
     endpointType = ep;
   } else {
-    // Only auto-detect Ollama in experimental mode
-    if (experimental) {
-      const ollama = detectOllama();
-      if (ollama.running) {
-        logger.info("Detected Ollama on localhost:11434. Using it for onboarding.");
-        endpointType = "ollama";
-      } else {
-        endpointType = await promptEndpoint(ollama, experimental);
-      }
+    const ollama = detectOllama();
+    if (ollama.running && isExperimentalEnabled()) {
+      logger.info("Detected Ollama on localhost:11434. Using it for onboarding.");
+      endpointType = "ollama";
     } else {
-      endpointType = await promptEndpoint({ installed: false, running: false }, experimental);
+      endpointType = await promptEndpoint(ollama);
     }
   }
 

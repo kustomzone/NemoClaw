@@ -115,8 +115,8 @@ function showConfig(config, logger) {
     logger.info(`  Profile:     ${config.profile}`);
     logger.info(`  Onboarded:   ${config.onboardedAt}`);
 }
-async function promptEndpoint(ollama, experimental) {
-    const options = [
+async function promptEndpoint(ollama) {
+    return (await (0, prompt_js_1.promptSelect)("Select your inference endpoint:", [
         {
             label: "NVIDIA Build (build.nvidia.com)",
             value: "build",
@@ -127,23 +127,22 @@ async function promptEndpoint(ollama, experimental) {
             value: "ncp",
             hint: "dedicated capacity, SLA-backed",
         },
-    ];
-    if (experimental) {
-        options.push({
-            label: "Self-hosted NIM",
+        {
+            label: "Self-hosted NIM [experimental]",
             value: "nim-local",
             hint: "experimental — your own NIM container deployment",
-        }, {
-            label: "Local vLLM",
+        },
+        {
+            label: "Local vLLM [experimental]",
             value: "vllm",
             hint: "experimental — local development",
-        }, {
-            label: "Local Ollama",
+        },
+        {
+            label: "Local Ollama [experimental]",
             value: "ollama",
             hint: `experimental — ${ollama.installed ? "installed locally" : "localhost:11434"}`,
-        });
-    }
-    return (await (0, prompt_js_1.promptSelect)("Select your inference endpoint:", options));
+        },
+    ]));
 }
 function execOpenShell(args) {
     return (0, node_child_process_1.execFileSync)("openshell", args, {
@@ -172,7 +171,6 @@ async function cliOnboard(opts) {
         }
     }
     // Step 1: Endpoint Selection
-    const experimental = isExperimentalEnabled();
     let endpointType;
     if (opts.endpoint) {
         if (!ENDPOINT_TYPES.includes(opts.endpoint)) {
@@ -180,26 +178,19 @@ async function cliOnboard(opts) {
             return;
         }
         const ep = opts.endpoint;
-        if (!experimental && !SUPPORTED_ENDPOINT_TYPES.includes(ep)) {
-            logger.warn(`Endpoint '${ep}' is experimental. Set NEMOCLAW_EXPERIMENTAL=1 to enable it.`);
-            return;
+        if (!SUPPORTED_ENDPOINT_TYPES.includes(ep)) {
+            logger.warn(`Note: '${ep}' is experimental and may not work reliably.`);
         }
         endpointType = ep;
     }
     else {
-        // Only auto-detect Ollama in experimental mode
-        if (experimental) {
-            const ollama = detectOllama();
-            if (ollama.running) {
-                logger.info("Detected Ollama on localhost:11434. Using it for onboarding.");
-                endpointType = "ollama";
-            }
-            else {
-                endpointType = await promptEndpoint(ollama, experimental);
-            }
+        const ollama = detectOllama();
+        if (ollama.running && isExperimentalEnabled()) {
+            logger.info("Detected Ollama on localhost:11434. Using it for onboarding.");
+            endpointType = "ollama";
         }
         else {
-            endpointType = await promptEndpoint({ installed: false, running: false }, experimental);
+            endpointType = await promptEndpoint(ollama);
         }
     }
     // Step 2: Endpoint URL resolution
