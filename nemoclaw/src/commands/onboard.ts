@@ -25,7 +25,7 @@ export interface OnboardOptions {
 }
 
 const ENDPOINT_TYPES: EndpointType[] = ["build", "ncp", "nim-local", "vllm", "ollama", "custom"];
-const SUPPORTED_ENDPOINT_TYPES: EndpointType[] = ["build", "ncp"];
+const SUPPORTED_ENDPOINT_TYPES: EndpointType[] = ["build", "ncp", "ollama"];
 
 function isExperimentalEnabled(): boolean {
   return process.env.NEMOCLAW_EXPERIMENTAL === "1";
@@ -159,6 +159,16 @@ async function promptEndpoint(
     },
   ];
 
+  options.push({
+    label: "Local Ollama",
+    value: "ollama",
+    hint: ollama.running
+      ? "detected on localhost:11434"
+      : ollama.installed
+        ? "installed locally"
+        : "localhost:11434",
+  });
+
   if (isExperimentalEnabled()) {
     options.push(
       {
@@ -170,11 +180,6 @@ async function promptEndpoint(
         label: "Local vLLM [experimental]",
         value: "vllm",
         hint: "experimental — local development",
-      },
-      {
-        label: "Local Ollama [experimental]",
-        value: "ollama",
-        hint: `experimental — ${ollama.installed ? "installed locally" : "localhost:11434"}`,
       },
     );
   }
@@ -231,7 +236,7 @@ export async function cliOnboard(opts: OnboardOptions): Promise<void> {
     endpointType = ep;
   } else {
     const ollama = detectOllama();
-    if (ollama.running && isExperimentalEnabled()) {
+    if (ollama.running) {
       logger.info("Detected local inference option: Ollama.");
       logger.info("Select it explicitly if you want to use it.");
     }

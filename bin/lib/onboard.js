@@ -324,13 +324,13 @@ async function setupNim(sandboxName, gpu) {
     key: "cloud",
     label:
       "NVIDIA Cloud API (build.nvidia.com)" +
-      (EXPERIMENTAL && !ollamaRunning && !vllmRunning ? " (recommended)" : ""),
+      (!ollamaRunning && !(EXPERIMENTAL && vllmRunning) ? " (recommended)" : ""),
   });
-  if (EXPERIMENTAL && (hasOllama || ollamaRunning)) {
+  if (hasOllama || ollamaRunning) {
     options.push({
       key: "ollama",
       label:
-        `Local Ollama (localhost:11434)${ollamaRunning ? " — running" : ""} [experimental]` +
+        `Local Ollama (localhost:11434)${ollamaRunning ? " — running" : ""}` +
         (ollamaRunning ? " (suggested)" : ""),
     });
   }
@@ -342,8 +342,8 @@ async function setupNim(sandboxName, gpu) {
   }
 
   // On macOS without Ollama, offer to install it
-  if (EXPERIMENTAL && !hasOllama && process.platform === "darwin") {
-    options.push({ key: "install-ollama", label: "Install Ollama (macOS) [experimental]" });
+  if (!hasOllama && process.platform === "darwin") {
+    options.push({ key: "install-ollama", label: "Install Ollama (macOS)" });
   }
 
   if (options.length > 1) {

@@ -64,7 +64,6 @@ const { setupNim } = require(${onboardPath});
       encoding: "utf-8",
       env: {
         ...process.env,
-        NEMOCLAW_EXPERIMENTAL: "1",
         HOME: tmpDir,
       },
     });
