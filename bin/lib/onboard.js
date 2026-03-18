@@ -67,28 +67,41 @@ async function preflight() {
       process.exit(1);
     }
   }
-  console.log(`  ✓ openshell CLI: ${runCapture("openshell --version 2>/dev/null || echo unknown", { ignoreError: true })}`);
+  const openshellVersion = runCapture("openshell --version 2>/dev/null || echo unknown", { ignoreError: true }).trim();
+  console.log(`  ✓ openshell CLI: ${openshellVersion}`);
 
-  // cgroup v2 + Docker cgroupns
-  const cgroup = checkCgroupConfig();
-  if (!cgroup.ok) {
-    console.error("");
-    console.error("  !! cgroup v2 detected but Docker is not configured for cgroupns=host.");
-    console.error("     OpenShell's gateway runs k3s inside Docker, which will fail with:");
-    console.error("");
-    console.error("       openat2 /sys/fs/cgroup/kubepods/pids.max: no such file or directory");
-    console.error("");
-    console.error("     To fix, run:");
-    console.error("");
-    console.error("       nemoclaw setup-spark");
-    console.error("");
-    console.error("     This adds \"default-cgroupns-mode\": \"host\" to /etc/docker/daemon.json");
-    console.error("     (preserving any existing settings) and restarts Docker.");
-    console.error("");
-    console.error(`     Detail: ${cgroup.reason}`);
-    process.exit(1);
+  // OpenShell v0.0.8+ handles cgroup v2 host namespace internally
+  // (OpenShell#329). For older versions, check that Docker is configured
+  // with cgroupns=host so k3s doesn't crash on cgroup v2 hosts.
+  const versionMatch = openshellVersion.match(/(\d+\.\d+\.\d+)/);
+  let openshellTooOld = false;
+  if (versionMatch) {
+    const parts = versionMatch[1].split(".").map(Number);
+    const current = parts[0] * 10000 + parts[1] * 100 + parts[2];
+    const minimum = 0 * 10000 + 0 * 100 + 8; // 0.0.8
+    openshellTooOld = current < minimum;
   }
-  console.log("  ✓ cgroup configuration OK");
+
+  if (openshellTooOld) {
+    const cgroup = checkCgroupConfig();
+    if (!cgroup.ok) {
+      console.error("");
+      console.error("  !! cgroup v2 detected but Docker is not configured for cgroupns=host.");
+      console.error("     OpenShell's gateway runs k3s inside Docker, which will fail with:");
+      console.error("");
+      console.error("       openat2 /sys/fs/cgroup/kubepods/pids.max: no such file or directory");
+      console.error("");
+      console.error("     Either upgrade openshell to v0.0.8+ (recommended):");
+      console.error("       https://github.com/NVIDIA/OpenShell/releases");
+      console.error("");
+      console.error("     Or fix Docker cgroup config:");
+      console.error("       nemoclaw setup-spark");
+      console.error("");
+      console.error(`     Detail: ${cgroup.reason}`);
+      process.exit(1);
+    }
+    console.log("  ✓ cgroup configuration OK");
+  }
 
   // GPU
   const gpu = nim.detectGpu();
